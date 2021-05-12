@@ -28,9 +28,11 @@ class RBFKernelFn(tf.keras.layers.Layer):
 
     @property
     def kernel(self):
+        # tf.print('amp', tf.nn.softplus(0.1 * self._amplitude))
+        # tf.print('ls', tf.nn.softplus(10.0 * self._length_scale))
         return tfp.math.psd_kernels.ExponentiatedQuadratic(
-            amplitude=tf.nn.softplus(0.1 * self._amplitude), # 0.1
-            length_scale=tf.nn.softplus(10.0 * self._length_scale) # 5.
+            amplitude=0.8, #tf.nn.softplus(0.1 * self._amplitude), # 0.1
+            length_scale=0.1 #tf.nn.softplus(10.0 * self._length_scale) # 5.
         )
 
 
@@ -40,6 +42,7 @@ def build_model(data_dims=2):
     num_classes = 1
     batch_size = 8
     inst_bag_dim = 8
+    feature_dim = 8
 
     def mc_sampling(x):
         """
@@ -75,12 +78,12 @@ def build_model(data_dims=2):
     f = tf.keras.layers.Dense(8, activation=None)(input)
     x = tf.keras.layers.Activation('sigmoid')(f)
     x = tfp.layers.VariationalGaussianProcess(
-        # mean_fn=tf.constant(-5),
+        mean_fn=lambda x: tf.ones([1]) * -2.0,
         num_inducing_points=num_inducing_points,
         kernel_provider=RBFKernelFn(),
         event_shape=[1],  # output dimensions
         inducing_index_points_initializer=tf.keras.initializers.RandomUniform(
-            minval=0.0, maxval=1.0, seed=None
+            minval=0.3, maxval=0.7, seed=None
         ),
         jitter=10e-3,
         convert_to_tensor_fn=tfp.distributions.Distribution.sample,
@@ -91,7 +94,7 @@ def build_model(data_dims=2):
     x = tf.keras.layers.Lambda(mc_sampling)(x)
     # x = tf.reshape(x, [-1, 20])
     x = tf.keras.layers.Activation('sigmoid')(x)
-    a = tf.keras.layers.Lambda(mc_integration)(x)
+    a = tf.keras.layers.Lambda(mc_integration, name='instance_attention')(x)
     # a = tf.keras.layers.Activation('softmax')(a)
     x = tf.keras.layers.Lambda(attention_multiplication)([a,f])
     x = tf.reshape(x, shape=[1, -1])
@@ -103,10 +106,11 @@ def build_model(data_dims=2):
     model.add_loss(kl_loss(model, batch_size, num_training_points))
     # model.build()
 
-    model.compile(optimizer=tf.optimizers.SGD(learning_rate=0.1),
+    instance_model = tf.keras.Model(inputs=model.inputs, outputs=model.get_layer('instance_attention').output)
+    model.compile(optimizer=tf.optimizers.SGD(learning_rate=0.01),
                   loss=tf.keras.losses.MeanSquaredError(),
                   metrics=[tf.keras.metrics.BinaryAccuracy()])
-    return model
+    return model, instance_model
 
 def kl_loss(head, batch_size, num_training_points):
     # tf.print('kl_div: ', kl_div)
@@ -115,7 +119,7 @@ def kl_loss(head, batch_size, num_training_points):
 
     def _kl_loss():
         # kl_weight = tf.cast(0.001 * batch_size / num_training_points, tf.float32)
-        kl_weight = tf.cast(0.001 * batch_size / num_training_points, tf.float32)
+        kl_weight = tf.cast(0.1 * batch_size / num_training_points, tf.float32)
         kl_div = tf.reduce_sum(head.layers[3].submodules[5].surrogate_posterior_kl_divergence_prior())
 
         loss = tf.multiply(kl_weight, kl_div)
