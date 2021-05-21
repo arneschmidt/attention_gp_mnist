@@ -3,7 +3,7 @@ import numpy as np
 
 def generate_data(number_of_bags = 1000):
     instances_per_bag = 40
-    positive_instances_per_bag = 4
+    positive_instances_per_bag = 10
     percentage_positive_bags = 0.5
     mean_positive = [[1, 0], [0, 1]]
     mean_negative = [[1, 1], [0, 0]]
