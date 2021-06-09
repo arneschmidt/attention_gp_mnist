@@ -1,40 +1,40 @@
-import matplotlib.pyplot as plt
+import tensorflow as tf
 import numpy as np
 
-def generate_data(number_of_bags = 1000):
-    instances_per_bag = 40
-    positive_instances_per_bag = 10
-    percentage_positive_bags = 0.5
-    mean_positive = [[1, 0], [0, 1]]
-    mean_negative = [[1, 1], [0, 0]]
-    covariance = [[0.01, 0.0], [0.0, 0.01]]
-    negative_instances_per_bag = instances_per_bag - positive_instances_per_bag
-    np.random.seed(42)
-    x = np.zeros([number_of_bags, instances_per_bag, 2])
-    y = np.zeros([number_of_bags, instances_per_bag])
-    y_bags = np.zeros([number_of_bags, 1])
-    y_bags[0:int(number_of_bags * percentage_positive_bags), :] = 1
-    for i in range(number_of_bags):
-        x_neg1 = np.random.multivariate_normal(mean_negative[0], covariance, int(instances_per_bag / 2))
-        x_neg2 = np.random.multivariate_normal(mean_negative[1], covariance, int(instances_per_bag / 2))
-        y_instances = np.full(shape=(instances_per_bag), fill_value=0)
-        x_instances = np.concatenate((x_neg1, x_neg2))
+class Data:
+    def __init__(self):
+        self.x_full, self.y_full, self.x_test, self.y_test = self.load_mnist_data()
+        self.n_data_points = 60000
 
-        if i < number_of_bags * percentage_positive_bags:
-            id_choice = np.random.choice(range(instances_per_bag), size=positive_instances_per_bag, replace=False)
-            for id in id_choice:
-                dist_choice = np.random.choice([0,1], size=1)
-                x_pos1 = np.random.multivariate_normal(mean_positive[dist_choice[0]], covariance, 1)
-                x_instances[id] = x_pos1
-                y_instances[id] = 1
+    def load_mnist_data(self):
+        (x_train, y_train), (x_test, y_test) = tf.keras.datasets.mnist.load_data()
+        x_full = x_train / 255
+        y_full = 1.0 - np.clip(y_train, a_min=0, a_max=1).astype(int)
+        x_test = x_test / 255
+        y_test = 1.0 - np.clip(y_test, a_min=0, a_max=1).astype(int)
+        return x_full, y_full, x_test, y_test
 
-        x[i] = x_instances
-        y[i] = y_instances
-        # plt.figure()
-        # plt.plot(x_instances[...,0], x_instances[...,1], 'kx')
-        # plt.show()
-    x = np.expand_dims(np.array(x, dtype=np.float), axis=1)
-    y = np.array(y, dtype=np.float)
-    y_bags = np.array(y_bags, dtype=np.float)
+    def generate_train_data(self, batch_size=128, indices=None):
+        train_gen = tf.data.Dataset.from_tensor_slices((self.x_full, self.y_full))
+        train_gen = self._prepare_data(train_gen, batch_size)
+        return train_gen
 
-    return x, y, y_bags
+    def generate_test_data(self, batch_size=128, convert_to_bags=False):
+        test_gen = tf.data.Dataset.from_tensor_slices((self.x_test, self.y_test))
+        test_gen = self._prepare_data(test_gen, batch_size, convert_to_bags=convert_to_bags)
+        return test_gen
+
+    def _prepare_data(self, ds, batch_size, convert_to_bags=True):
+        def _convert_to_bags(x, y):
+            y = tf.reduce_max(y, axis=0)
+            y = tf.reshape(y, shape=[1])
+            return x, y
+
+        ds = ds.cache()
+        # ds_train = ds_train.shuffle(ds_info.splits['train'].num_examples)
+        ds = ds.batch(batch_size)
+        if convert_to_bags:
+            ds = ds.map(lambda x, y: _convert_to_bags(x, y))
+        ds = ds.prefetch(tf.data.experimental.AUTOTUNE)
+        return ds
+

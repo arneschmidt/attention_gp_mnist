@@ -1,24 +1,29 @@
+import os
 import tensorflow as tf
 import tensorflow_probability as tfp
 import numpy as np
 
-from data import generate_data
+from data import Data
 from model import build_model
-
+from mil.data.datasets import mnist_bags
+from evaluate import visualize_attention
 
 def main():
-    x, y, y_bags = generate_data()
-    model, instance_model = build_model(2)
+    save_dir = './out_images/'
+    os.makedirs(save_dir, exist_ok=True)
+    bag_size = 9
+    data_gen = Data()
+    train_data = data_gen.generate_train_data(batch_size=bag_size)
+    test_data_instances = data_gen.generate_test_data(batch_size=bag_size, convert_to_bags=False)
+    test_data_bags = data_gen.generate_test_data(batch_size=bag_size, convert_to_bags=True)
+    model, instance_model = build_model(data_dims=[28,28])
 
     model.summary()
-    ds = tf.data.Dataset.from_tensor_slices((x, y_bags))
-    ds = ds.shuffle(buffer_size=1000)
-    model.fit(ds, batch_size=3, epochs=20)
-    for i in range(100):
-        preds = instance_model.predict_generator(x[i])
-        print('instance_p', preds)
-        print('instance_g', y[i])
+    model.fit(train_data, batch_size=bag_size, epochs=5)
+    print('Bag level evaluation:')
+    model.evaluate(test_data_bags)
 
+    visualize_attention(model, instance_model, test_data_instances, save_dir)
 
 if __name__ == '__main__':
     main()
