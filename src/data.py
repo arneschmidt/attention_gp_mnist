@@ -29,12 +29,17 @@ class Data:
             y = tf.reduce_max(y, axis=0)
             y = tf.reshape(y, shape=[1])
             return x, y
+        #
+        # def _reshape(x, y):
+        #     x = tf.reshape(x, shape=[batch_size, 28,28,1])
+        #     return x, y
 
         ds = ds.cache()
         # ds_train = ds_train.shuffle(ds_info.splits['train'].num_examples)
         ds = ds.batch(batch_size)
         if convert_to_bags:
             ds = ds.map(lambda x, y: _convert_to_bags(x, y))
+        # ds = ds.map(lambda x, y: _reshape(x, y))
         ds = ds.prefetch(tf.data.experimental.AUTOTUNE)
         return ds
 
