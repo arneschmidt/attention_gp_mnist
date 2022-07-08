@@ -37,14 +37,23 @@ class RBFKernelFn(tf.keras.layers.Layer):
         )
 
 
-def build_model(attention, data_dims=[28,28]):
+def build_model(attention, dataset):
     num_inducing_points = 64
     num_training_points = 8000
-    num_classes = 2
     batch_size = 8
     inst_bag_dim = 8
     feature_dim = 8
     mc_samples = 20
+    bag_size = 9
+
+    if dataset == 'mnist':
+        data_dims = [28, 28]
+        num_classes = 2
+    elif dataset == 'cifar10':
+        data_dims = [32, 32, 3]
+        num_classes = 3
+    else:
+        print('Choose valid dataset!')
 
     def mc_sampling(x):
         """
@@ -55,6 +64,14 @@ def build_model(attention, data_dims=[28,28]):
         samples = x.sample(mc_samples)
         return samples
 
+    def mc_dropout_sampling(x):
+        x_concat = tf.keras.layers.Dropout(0.5,  name='instance_attention')(x, training=True)
+        x_concat = tf.expand_dims(x_concat, axis=0)
+        for i in range(mc_samples-1):
+            x_i = tf.keras.layers.Dropout(0.5,  name='instance_attention')(x, training=True)
+            x_i = tf.expand_dims(x_i, axis=0)
+            x_concat = tf.concat([x_concat, x_i], axis=0)
+        return x_concat
 
     def mc_integration(x):
         """
@@ -81,7 +98,7 @@ def build_model(attention, data_dims=[28,28]):
         f = i[1]
         # tf.print('attention', a)
         # tf.print('features', f)
-        if attention == 'gp':
+        if attention != 'att_det' and attention != 'att_det_gated' and attention != 'mean_agg':
             out = tf.linalg.matvec(f, a, transpose_a=True)
         else:
             a = tf.reshape(a, shape=[-1])
@@ -93,18 +110,30 @@ def build_model(attention, data_dims=[28,28]):
         out = tf.reshape(x, shape=[num_classes])
         return out
 
+    def att_mean(x):
+        dims = x.shape[1]
+        x = tf.reduce_mean(x, axis=0)
+        out = tf.reshape(x, [1, dims])
+        return out
+
     input = tf.keras.layers.Input(shape=data_dims)
-    # x = tf.keras.layers.Flatten()(input)
-    # x = tf.keras.layers.Dense(128, activation='relu')(x)
-    # # x = tf.keras.layers.Dense(64, activation='relu')(x)
-    # f = tf.keras.layers.Dense(8, activation=None)(x)
-    x = tf.reshape(input, shape=(-1, 28,28,1))
-    x = tf.keras.layers.Conv2D(4, (3, 3), activation='relu', kernel_initializer='he_uniform', input_shape=(-1, 28, 28, 1))(x)
-    x = tf.keras.layers.MaxPool2D()(x)
-    # x = tf.keras.layers.Conv2D(4, (3, 3), activation='relu', kernel_initializer='he_uniform', input_shape=(-1, 28, 28, 1))(input)
-    # x = tf.keras.layers.MaxPool2D()(x)
-    # x = tf.keras.layers.Dense(64, activation='relu')
+    if dataset == 'mnist':
+        x = tf.reshape(input, shape=(-1, 28, 28, 1))
+        x = tf.keras.layers.Conv2D(4, (3, 3), activation='relu', kernel_initializer='he_uniform', input_shape=(-1, 28, 28, 1))(x)
+        x = tf.keras.layers.MaxPool2D()(x)
+    elif dataset == 'cifar10':
+        # x = tf.reshape(input, shape=(bag_size, 32, 32, 3))
+        x = tf.keras.layers.Conv2D(32, (3, 3), activation='relu', kernel_initializer='he_uniform', padding='same')(input)
+        x = tf.keras.layers.Conv2D(32, (3, 3), activation='relu', kernel_initializer='he_uniform', padding='same')(x)
+        x = tf.keras.layers.MaxPool2D()(x)
+        x = tf.keras.layers.Conv2D(64, (3, 3), activation='relu', kernel_initializer='he_uniform', padding='same')(x)
+        x = tf.keras.layers.Conv2D(64, (3, 3), activation='relu', kernel_initializer='he_uniform', padding='same')(x)
+        x = tf.keras.layers.MaxPool2D()(x)
+        x = tf.keras.layers.Conv2D(128, (3, 3), activation='relu', kernel_initializer='he_uniform', padding='same')(x)
+        x = tf.keras.layers.Conv2D(128, (3, 3), activation='relu', kernel_initializer='he_uniform', padding='same')(x)
+        x = tf.keras.layers.MaxPool2D()(x)
     x = tf.keras.layers.Flatten()(x)
+    x = tf.keras.layers.Dense(128, activation='relu')(x)
     f = tf.keras.layers.Dense(64, activation='relu')(x)
     if attention == 'gp':
         x = tf.keras.layers.Dense(32, activation='sigmoid')(f)
@@ -123,31 +152,52 @@ def build_model(attention, data_dims=[28,28]):
             )(x)
 
         x = tf.keras.layers.Lambda(mc_sampling, name='instance_attention')(x)
-        # x = tf.reshape(x, [-1, 20])
-        # x = tf.keras.layers.Activation('sigmoid')(x)
-        # x = tf.keras.layers.Activation('softmax')(x)
         a = tf.keras.layers.Lambda(custom_softmax, name='instance_softmax')(x)
-        x = tf.keras.layers.Lambda(attention_multiplication)([a,f])
+        x = tf.keras.layers.Lambda(attention_multiplication)([a, f]) # dim: (20,9,1)
+
+        x = tf.reshape(x, shape=[mc_samples, 1, -1]) # dim: (20,4)
+        x = tf.keras.layers.Dense(num_classes, activation='softmax',  name='bag_softmax')(x) # (20,1,64)
+        output = tf.keras.layers.Lambda(mc_integration)(x)  # (20,1,3)
+    elif attention == 'bnn_mcdrop':
+        x = tf.keras.layers.Dense(32, activation='relu')(f)
+        x = tf.keras.layers.Lambda(mc_dropout_sampling, name='instance_attention')(x)
+        x = tf.keras.layers.Dense(1, activation='relu')(x)
+        a = tf.keras.layers.Lambda(custom_softmax, name='instance_softmax')(x)
+        x = tf.keras.layers.Lambda(attention_multiplication)([a, f])
 
         x = tf.reshape(x, shape=[mc_samples, 1, -1])
-        # x = tf.reshape(x, shape=[ 1, -1])
-        # x = tf.keras.layers.Dense(8, activation='relu')(x)
         x = tf.keras.layers.Dense(num_classes, activation='softmax',  name='bag_softmax')(x)
         output = tf.keras.layers.Lambda(mc_integration)(x)
-    else:
+    elif attention == 'bnn_gauss':
+        x = tfp.layers.DenseReparameterization(32, kernel_posterior_tensor_fn=lambda d: d.sample(mc_samples))(f)
+        # x = tfp.layers.DenseReparameterization(1, kernel_posterior_tensor_fn=lambda d: d.sample(mc_samples))(x)
+        x = tf.keras.layers.Dense(1, activation='relu')(x)
+        a = tf.keras.layers.Lambda(custom_softmax, name='instance_softmax')(x) # dim: (20, 9, 1)
+        x = tf.keras.layers.Lambda(attention_multiplication)([a, f])
+
+        x = tf.reshape(x, shape=[mc_samples, 1, -1])
+        x = tf.keras.layers.Dense(num_classes, activation='softmax',  name='bag_softmax')(x)
+        output = tf.keras.layers.Lambda(mc_integration)(x)
+    elif attention=='att_det':
         a = Mil_Attention(f.shape[1], output_dim=0, name='instance_softmax', use_gated=False)(f)
         x = tf.keras.layers.Lambda(attention_multiplication)([a, f])
         # x = tf.keras.layers.Dense(64, activation='relu')(x)
         x = tf.keras.layers.Dense(num_classes, activation='softmax', name='bag_softmax')(x)
         output = tf.keras.layers.Lambda(reshape_final)(x)
+    elif attention == 'att_det_gated':
+        a = Mil_Attention(f.shape[1], output_dim=0, name='instance_softmax', use_gated=True)(f)
+        x = tf.keras.layers.Lambda(attention_multiplication)([a, f])
+        # x = tf.keras.layers.Dense(64, activation='relu')(x)
+        x = tf.keras.layers.Dense(num_classes, activation='softmax', name='bag_softmax')(x)
+        output = tf.keras.layers.Lambda(reshape_final)(x)
+    elif attention=='mean_agg':
+        x = tf.keras.layers.Lambda(att_mean, name='instance_softmax')(x)
+        x = tf.keras.layers.Dense(num_classes, activation='softmax', name='bag_softmax')(x)
+        output = tf.keras.layers.Lambda(reshape_final)(x)
 
-    # output = tf.reshape(x, shape=[1])
-    # output = tf.expand_dims(x, axis=1)
-
-    model = tf.keras.Model(inputs=input, outputs=output, name="sgp_mil")
+    model = tf.keras.Model(inputs=input, outputs=output, name="mil_model")
     if attention == 'gp':
         model.add_loss(kl_loss(model, batch_size, num_training_points))
-    # model.build()
 
     instance_model = tf.keras.Model(inputs=model.inputs, outputs=model.get_layer('instance_softmax').output)
     bag_level_uncertainty_model = tf.keras.Model(inputs=model.inputs, outputs=model.get_layer('bag_softmax').output)
@@ -156,6 +206,7 @@ def build_model(attention, data_dims=[28,28]):
                   metrics=[tf.keras.metrics.SparseCategoricalAccuracy()])
     return model, instance_model, bag_level_uncertainty_model
 
+
 def kl_loss(head, batch_size, num_training_points):
     # tf.print('kl_div: ', kl_div)
     num_training_points = tf.constant(num_training_points, dtype=tf.float32)
@@ -163,16 +214,14 @@ def kl_loss(head, batch_size, num_training_points):
 
     layer_name = 'variational_gaussian_process'
     vgp_layer = head.get_layer(layer_name)
+    # layer_no = 13
+    # vgp_layer = head.layers[layer_no]
 
     def _kl_loss():
-        # kl_weight = tf.cast(0.001 * batch_size / num_training_points, tf.float32)
         kl_weight = tf.cast(1.0 / num_training_points, tf.float32)
         kl_div = tf.reduce_sum(vgp_layer.submodules[5].surrogate_posterior_kl_divergence_prior())
 
         loss = tf.multiply(kl_weight, kl_div)
-        # tf.print('kl_weight: ', kl_weight)
-        # tf.print('kl_loss: ', loss)
-        # # tf.print('u_var: ', head.variables[4])
         return loss
 
     return _kl_loss
