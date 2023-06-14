@@ -19,7 +19,7 @@ def main():
     dataset = 'mnist' # 'mnist' or 'cifar10'
     bag_size = 9
     epochs = 5
-    save_dir = 'out_new_10r_bnng'
+    save_dir = 'out_gp'
     attention = ['gp'] #['gp', 'bnn_gauss', 'bnn_mcdrop', 'mean_agg', 'att_det', 'att_det_gated']
     n_repetitions = 1
     save_train_hist = True
@@ -47,8 +47,8 @@ def main():
             model, instance_model, bag_level_uncertainty_model = build_model(attention=attention[j], dataset=dataset)
 
             model.summary()
-            hist = model.fit(train_data, epochs=1, steps_per_epoch=1)
-            # hist = model.fit(train_data, validation_data=val_data, batch_size=bag_size, epochs=epochs)
+            # hist = model.fit(train_data, epochs=1, steps_per_epoch=1)
+            hist = model.fit(train_data, validation_data=val_data, epochs=epochs)
 
             print('Bag level evaluation:')
             results = bag_level_evaluation(test_data_bags, bag_level_uncertainty_model, dataset=dataset, model=attention[j], run=i, results=results)
