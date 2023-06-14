@@ -1,7 +1,7 @@
 import os
 from data import Data
 from model import build_model
-from evaluate import visualize_attention, bag_level_evaluation
+from evaluate import print_tsne_evaluation, visualize_attention, bag_level_evaluation
 import tensorflow as tf
 
 def main():
@@ -14,6 +14,7 @@ def main():
     os.makedirs(save_dir, exist_ok=True)
 
     data_gen = Data()
+    # train_data_instances = data_gen.generate_train_data(batch_size=bag_size, convert_to_bags=False)
     train_data = data_gen.generate_train_data(batch_size=bag_size)
     test_data_instances = data_gen.generate_test_data(batch_size=bag_size, convert_to_bags=False)
     test_data_bags = data_gen.generate_test_data(batch_size=bag_size, convert_to_bags=True)
@@ -26,6 +27,7 @@ def main():
     print('Bag level evaluation:')
     # model.evaluate(test_data_bags)
     if attention == 'gp':
+        print_tsne_evaluation(instance_model, test_data_instances)
         bag_level_evaluation(test_data_bags, bag_level_uncertainty_model)
         visualize_attention(bag_level_uncertainty_model, instance_model, test_data_instances, save_dir, quick_eval=False)
     else:

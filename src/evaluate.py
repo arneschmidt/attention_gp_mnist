@@ -109,4 +109,13 @@ def bag_level_evaluation(test_gen, bag_level_uncertainty_model):
     print('Bag Accuracy: ' + str(accuracy)
           + '; correct_pred_std: ' + str(correct_pred_std)
           + '; wrong_pred_std: ' + str(wrong_pred_std))
+def print_tsne_evaluation(instance_model, train_data_instances):
+    test_data = train_data_instances.as_numpy_iterator()
+
+    n = len(train_data_instances)
+
+    bag_pred = instance_model.predict(test_data)
+    print(bag_pred)
+
+
 

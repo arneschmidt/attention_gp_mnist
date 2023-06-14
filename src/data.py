@@ -14,9 +14,9 @@ class Data:
         y_test = 1.0 - np.clip(y_test, a_min=0, a_max=1).astype(int)
         return x_full, y_full, x_test, y_test
 
-    def generate_train_data(self, batch_size=128, indices=None):
+    def generate_train_data(self, batch_size=128, convert_to_bags=False):
         train_gen = tf.data.Dataset.from_tensor_slices((self.x_full, self.y_full))
-        train_gen = self._prepare_data(train_gen, batch_size)
+        train_gen = self._prepare_data(train_gen, batch_size, convert_to_bags=convert_to_bags)
         return train_gen
 
     def generate_test_data(self, batch_size=128, convert_to_bags=False):
