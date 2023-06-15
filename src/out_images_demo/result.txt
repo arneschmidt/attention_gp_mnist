@@ -1,0 +1,5 @@
+Bag level evaluation:
+Bag Accuracy: 0.9658273381294964; correct_pred_std: 0.007294663559383005; wrong_pred_std: 0.1405900066893082
+Attention accuracy:  0.6339928057553957
+Correct attention std:  0.0734268797865362
+Wrong attention std:  0.07503938322992085

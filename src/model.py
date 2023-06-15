@@ -32,18 +32,15 @@ class RBFKernelFn(tf.keras.layers.Layer):
         # tf.print('amp', tf.nn.softplus(0.1 * self._amplitude))
         # tf.print('ls', tf.nn.softplus(10.0 * self._length_scale))
         return tfp.math.psd_kernels.ExponentiatedQuadratic(
-            amplitude=tf.nn.softplus(0.1 * self._amplitude), # 0.1
-            length_scale=tf.nn.softplus(10.0 * self._length_scale) # 5.
+            amplitude= 1.0 , # tf.nn.softplus(0.1 * self._amplitude), #
+            length_scale= 0.1, # tf.nn.softplus(10.0 * self._length_scale) #
         )
 
 
-def build_model(attention, data_dims=[28,28]):
-    num_inducing_points = 64
+def build_model(attention, data_dims=[28,28], feature_dims=32, num_inducing_points = 16):
     num_training_points = 8000
     num_classes = 2
     batch_size = 8
-    inst_bag_dim = 8
-    feature_dim = 8
     mc_samples = 20
 
     def mc_sampling(x):
@@ -107,7 +104,7 @@ def build_model(attention, data_dims=[28,28]):
     x = tf.keras.layers.Flatten()(x)
     f = tf.keras.layers.Dense(64, activation='relu')(x)
     if attention == 'gp':
-        x = tf.keras.layers.Dense(32, activation='sigmoid')(f)
+        x = tf.keras.layers.Dense(feature_dims, activation='sigmoid')(f)
         x = tfp.layers.VariationalGaussianProcess(
             mean_fn=lambda x: tf.ones([1]) * 0.0,
             num_inducing_points=num_inducing_points,
@@ -118,6 +115,7 @@ def build_model(attention, data_dims=[28,28]):
             ),
             jitter=10e-3,
             convert_to_tensor_fn=tfp.distributions.Distribution.sample,
+            unconstrained_observation_noise_variance_initializer=tf.initializers.constant(0.0),
             variational_inducing_observations_scale_initializer=tf.initializers.constant(
                 0.01 * np.tile(np.eye(num_inducing_points, num_inducing_points), (1, 1, 1))),
             )(x)

@@ -1,6 +1,8 @@
 import os
 import matplotlib.pyplot as plt
 import numpy as np
+import tensorflow as tf
+from sklearn.manifold import TSNE
 
 
 def visualize_attention(bag_level_uncertainty_model, instance_model, test_gen_instances, save_dir, quick_eval=True):
@@ -109,13 +111,54 @@ def bag_level_evaluation(test_gen, bag_level_uncertainty_model):
     print('Bag Accuracy: ' + str(accuracy)
           + '; correct_pred_std: ' + str(correct_pred_std)
           + '; wrong_pred_std: ' + str(wrong_pred_std))
-def print_tsne_evaluation(instance_model, train_data_instances):
+def print_tsne_evaluation(instance_model, train_data_instances, save_path, feature_dims, num_inducing_points):
+    feature_extractor = tf.keras.models.Sequential(instance_model.layers[:7])
+
     test_data = train_data_instances.as_numpy_iterator()
 
-    n = len(train_data_instances)
+    inducing_point_locs = instance_model.trainable_variables[7].numpy()[0]
+    print('INDUCING')
+    print(inducing_point_locs)
+    n = 200
+    features = []
+    means = []
+    stds = []
+    labels = []
+    for i in range(n):
+        x = next(test_data)
+        bag_features = feature_extractor.predict(x)
+        bag_preds = instance_model.predict(next(test_data))
+        features.append(bag_features)
+        mean = np.reshape(np.mean(bag_preds, axis=0), [-1])
+        std = np.reshape(np.std(bag_preds, axis=0), [-1])
+        means.append(mean)
+        stds.append(std)
+        labels.append(x[1])
+    features = np.array(features).reshape([-1,feature_dims])
+    means = np.array(means).reshape([-1])
+    stds = np.array(stds).reshape([-1])
+    labels = np.array(labels).reshape([-1])
 
-    bag_pred = instance_model.predict(test_data)
-    print(bag_pred)
+    feat_indpoints = np.concatenate([inducing_point_locs, features], axis=0)
+
+    if feat_indpoints.shape[1] > 2:
+        print('Calculating TSNE')
+        feat_2d = TSNE(n_components=2, n_iter=1000, random_state=0, n_jobs=4).fit_transform(feat_indpoints)
+    else:
+        feat_2d = feat_indpoints
+
+
+    fig = plt.figure()
+    plot = fig.add_subplot(1, 1, 1)
+    plot.scatter(feat_2d[num_inducing_points:,1], feat_2d[num_inducing_points:,0], marker='o')
+    plot.scatter(feat_2d[:num_inducing_points,1], feat_2d[:num_inducing_points,0], marker='^')
+    fig.savefig(save_path)
+
+
+
+
+
+
 
 
 
