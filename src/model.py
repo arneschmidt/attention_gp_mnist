@@ -8,17 +8,20 @@ class RBFKernelFn(tf.keras.layers.Layer):
     """
     RBF kernel for Gaussian processes.
     """
-    def __init__(self, **kwargs):
+    def __init__(self, trainable, lengthscale, variance, **kwargs):
         super(RBFKernelFn, self).__init__(**kwargs)
         dtype = kwargs.get('dtype', None)
+        self.trainable = trainable
+        self.lengthscale = lengthscale
+        self.variance = variance
 
         self._amplitude = self.add_variable(
-            initializer=tf.constant_initializer(0.0),
+            initializer=tf.constant_initializer(2.0),
             dtype=dtype,
             name='amplitude')
 
         self._length_scale = self.add_variable(
-            initializer=tf.constant_initializer(0.0),
+            initializer=tf.constant_initializer(-1.0),
             dtype=dtype,
             name='length_scale')
 
@@ -31,14 +34,21 @@ class RBFKernelFn(tf.keras.layers.Layer):
     def kernel(self):
         # tf.print('amp', tf.nn.softplus(0.1 * self._amplitude))
         # tf.print('ls', tf.nn.softplus(10.0 * self._length_scale))
+        if self.trainable:
+            amp = tf.nn.softplus(self._amplitude)
+            ls = tf.nn.softplus(self._length_scale)
+        else:
+            amp = self.variance
+            ls = self.lengthscale
+
         return tfp.math.psd_kernels.ExponentiatedQuadratic(
-            amplitude= 1.0 , # tf.nn.softplus(0.1 * self._amplitude), #
-            length_scale= 0.1, # tf.nn.softplus(10.0 * self._length_scale) #
+            amplitude= amp, # tf.nn.softplus(self._amplitude), #
+            length_scale= ls, # tf.nn.softplus(self._length_scale) #
         )
 
 
-def build_model(attention, data_dims=[28,28], feature_dims=32, num_inducing_points = 16):
-    num_training_points = 8000
+def build_model(attention, config, data_dims=[28,28]):
+    num_training_points = 60000
     num_classes = 2
     batch_size = 8
     mc_samples = 20
@@ -104,20 +114,22 @@ def build_model(attention, data_dims=[28,28], feature_dims=32, num_inducing_poin
     x = tf.keras.layers.Flatten()(x)
     f = tf.keras.layers.Dense(64, activation='relu')(x)
     if attention == 'gp':
-        x = tf.keras.layers.Dense(feature_dims, activation='sigmoid')(f)
+        x = tf.keras.layers.Dense(config['feature_dims'], activation='sigmoid')(f)
+        # x = tf.keras.layers.Dense(config['feature_dims'], activation=None)(f)
         x = tfp.layers.VariationalGaussianProcess(
-            mean_fn=lambda x: tf.ones([1]) * 0.0,
-            num_inducing_points=num_inducing_points,
-            kernel_provider=RBFKernelFn(),
+            mean_fn=lambda x: tf.ones([1]) * config['prior_mean'],
+            num_inducing_points=config['num_inducing_points'],
+            kernel_provider=RBFKernelFn(config['kernel_trainable'], config['kernel_lengthscale'],
+                                        config['kernel_variance']),
             event_shape=[1],  # output dimensions
             inducing_index_points_initializer=tf.keras.initializers.RandomUniform(
-                minval=0.3, maxval=0.7, seed=None
+                minval=config['indp_min'], maxval=config['indp_max'], seed=None
             ),
-            jitter=10e-3,
+            jitter=10e-5,
             convert_to_tensor_fn=tfp.distributions.Distribution.sample,
-            unconstrained_observation_noise_variance_initializer=tf.initializers.constant(0.0),
+            unconstrained_observation_noise_variance_initializer=tf.initializers.constant(config['obsnoise_var_init']),
             variational_inducing_observations_scale_initializer=tf.initializers.constant(
-                0.01 * np.tile(np.eye(num_inducing_points, num_inducing_points), (1, 1, 1))),
+                config['indp_var_init'] * np.tile(np.eye(config['num_inducing_points'], config['num_inducing_points']), (1, 1, 1))),
             )(x)
 
         x = tf.keras.layers.Lambda(mc_sampling, name='instance_attention')(x)
@@ -144,17 +156,17 @@ def build_model(attention, data_dims=[28,28], feature_dims=32, num_inducing_poin
 
     model = tf.keras.Model(inputs=input, outputs=output, name="sgp_mil")
     if attention == 'gp':
-        model.add_loss(kl_loss(model, batch_size, num_training_points))
+        model.add_loss(kl_loss(model, batch_size, num_training_points, config))
     # model.build()
 
     instance_model = tf.keras.Model(inputs=model.inputs, outputs=model.get_layer('instance_softmax').output)
     bag_level_uncertainty_model = tf.keras.Model(inputs=model.inputs, outputs=model.get_layer('bag_softmax').output)
-    model.compile(optimizer=tf.optimizers.Adam(learning_rate=0.0001),
+    model.compile(optimizer=tf.optimizers.Adam(learning_rate=config['learning_rate']),
                   loss=tf.keras.losses.SparseCategoricalCrossentropy(),
                   metrics=[tf.keras.metrics.SparseCategoricalAccuracy()])
     return model, instance_model, bag_level_uncertainty_model
 
-def kl_loss(head, batch_size, num_training_points):
+def kl_loss(head, batch_size, num_training_points, config):
     # tf.print('kl_div: ', kl_div)
     num_training_points = tf.constant(num_training_points, dtype=tf.float32)
     batch_size = tf.constant(batch_size, dtype=tf.float32)
@@ -164,7 +176,7 @@ def kl_loss(head, batch_size, num_training_points):
 
     def _kl_loss():
         # kl_weight = tf.cast(0.001 * batch_size / num_training_points, tf.float32)
-        kl_weight = tf.cast(1.0 / num_training_points, tf.float32)
+        kl_weight = tf.cast(1.0 / num_training_points, tf.float32)*config['kl_weight']
         kl_div = tf.reduce_sum(vgp_layer.submodules[5].surrogate_posterior_kl_divergence_prior())
 
         loss = tf.multiply(kl_weight, kl_div)
