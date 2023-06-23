@@ -1,6 +1,0 @@
-With GP attention:
-Bag level sparse_categorical_accuracy: 0.9730
-Attention accuracy:  0.9646892655367232
-
-Without GP attention:
-Bag level sparse_categorical_accuracy: 0.9613

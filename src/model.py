@@ -1,5 +1,6 @@
 import tensorflow as tf
 import tensorflow_probability as tfp
+import tensorflow_addons as tfa
 import numpy as np
 from layers import Mil_Attention
 
@@ -112,10 +113,14 @@ def build_model(attention, config, data_dims=[28,28]):
     # x = tf.keras.layers.MaxPool2D()(x)
     # x = tf.keras.layers.Dense(64, activation='relu')
     x = tf.keras.layers.Flatten()(x)
-    f = tf.keras.layers.Dense(64, activation='relu')(x)
+    f = tf.keras.layers.Dense(config['cnn_feature_dims'], activation='relu')(x)
     if attention == 'gp':
-        x = tf.keras.layers.Dense(config['feature_dims'], activation='sigmoid')(f)
-        # x = tf.keras.layers.Dense(config['feature_dims'], activation=None)(f)
+        if config['att_activation'] == 'sigmoid':
+            x = tf.keras.layers.Dense(config['feature_dims'], activation='sigmoid')(f)
+        elif config['att_activation'] == 'linear':
+            x = tf.keras.layers.Dense(config['feature_dims'], activation=None)(f)
+        else:
+            x = f
         x = tfp.layers.VariationalGaussianProcess(
             mean_fn=lambda x: tf.ones([1]) * config['prior_mean'],
             num_inducing_points=config['num_inducing_points'],
@@ -159,9 +164,19 @@ def build_model(attention, config, data_dims=[28,28]):
         model.add_loss(kl_loss(model, batch_size, num_training_points, config))
     # model.build()
 
-    instance_model = tf.keras.Model(inputs=model.inputs, outputs=model.get_layer('instance_softmax').output)
+    instance_model = tf.keras.Model(inputs=model.inputs, outputs=model.get_layer('instance_attention').output)
     bag_level_uncertainty_model = tf.keras.Model(inputs=model.inputs, outputs=model.get_layer('bag_softmax').output)
-    model.compile(optimizer=tf.optimizers.Adam(learning_rate=config['learning_rate']),
+
+    optimizers = [
+        tf.keras.optimizers.Adam(learning_rate=config['learning_rate']),
+        tf.keras.optimizers.Adam(learning_rate=config['learning_rate_gp'])
+    ]
+    optimizers_and_layers = [(optimizers[0], model.layers[:7]), (optimizers[1], model.layers[7]),
+                             (optimizers[0], model.layers[8:])]
+
+    optimizer = tfa.optimizers.discriminative_layer_training.MultiOptimizer(optimizers_and_layers)
+
+    model.compile(optimizer=optimizer,
                   loss=tf.keras.losses.SparseCategoricalCrossentropy(),
                   metrics=[tf.keras.metrics.SparseCategoricalAccuracy()])
     return model, instance_model, bag_level_uncertainty_model

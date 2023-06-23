@@ -18,7 +18,7 @@ def main(config):
 
     mlflow.set_tracking_uri(config["mlflow_url"])
     experiment_id = mlflow.set_experiment(experiment_name='attention_gp_mnist')
-    mlflow.start_run(experiment_id=experiment_id, run_name=save_dir.split('/')[-1])
+    mlflow.start_run(experiment_id=experiment_id, run_name=save_dir.split('/')[-2])
     mlflow.log_params(config)
 
     data_gen = Data()
@@ -38,10 +38,12 @@ def main(config):
     # model.evaluate(test_data_bags)
     if attention == 'gp':
         print_tsne_evaluation(instance_model, train_data_instances, 'TSNE_after_train.png', 'stat_after_train', config=config)
+        mlflow.log_artifacts(save_dir)
         bag_level_evaluation(test_data_bags, bag_level_uncertainty_model)
         visualize_attention(bag_level_uncertainty_model, instance_model, test_data_instances, save_dir, quick_eval=False)
     else:
         model.evaluate(test_data_bags)
+    mlflow.log_artifacts(save_dir)
 
 
 if __name__ == '__main__':

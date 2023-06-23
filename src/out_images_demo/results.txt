@@ -1,5 +1,0 @@
-Bag Accuracy: 0.9703237410071942; correct_pred_std: 0.010153984805708486; wrong_pred_std: 0.10100563116650323
-Attention Accuracy: 0.99
-
-All attention weights to 1:
-Bag Accuracy: 0.8471223021582733

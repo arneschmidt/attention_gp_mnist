@@ -127,7 +127,7 @@ def print_tsne_evaluation(instance_model, train_data_instances, save_name_tsne, 
     test_data = train_data_instances.as_numpy_iterator()
 
     inducing_point_locs = instance_model.trainable_variables[7].numpy()[0]
-    inducing_point_stds = np.diag(instance_model.trainable_variables[9][0].numpy())
+    inducing_point_stds = np.sqrt(np.diag(instance_model.trainable_variables[9][0].numpy()))
     inducing_point_means = instance_model.trainable_variables[8][0].numpy()
 
     n = 50
@@ -206,10 +206,10 @@ def print_tsne_evaluation(instance_model, train_data_instances, save_name_tsne, 
 
     fig = plt.figure()
     plot = fig.add_subplot(1, 1, 1)
-    plot.scatter(feat_2d[indices_no_noise,1], feat_2d[indices_no_noise,0], c=np.clip(stds[indices_no_noise], a_min=0.0, a_max=0.2),  vmin=0., vmax=0.2, marker='o', edgecolors='k', cmap='Greens', label='No noise')
-    plot.scatter(feat_2d[indices_low_noise,1], feat_2d[indices_low_noise,0], c=np.clip(stds[indices_low_noise], a_min=0.0, a_max=0.2), vmin=0., vmax=0.2, marker='s', edgecolors='k', cmap='Greens', label='Low noise')
-    plot.scatter(feat_2d[indices_high_noise,1], feat_2d[indices_high_noise,0], c=np.clip(stds[indices_high_noise], a_min=0.0, a_max=0.2), vmin=0., vmax=0.2, marker='p', edgecolors='k', cmap='Greens', label='High noise')
-    plot.scatter(feat_2d[indices_ind_points,1], feat_2d[indices_ind_points,0], c=np.clip(stds[indices_ind_points], a_min=0.0, a_max=0.2), vmin=0., vmax=0.2, marker='^', edgecolors='k', cmap='Reds', label='Inducing points')
+    plot.scatter(feat_2d[indices_no_noise,1], feat_2d[indices_no_noise,0], c=np.clip(stds[indices_no_noise], a_min=0.0, a_max=1.0),  vmin=0., vmax=1.0, marker='o', edgecolors='k', cmap='Greens', label='No noise')
+    plot.scatter(feat_2d[indices_low_noise,1], feat_2d[indices_low_noise,0], c=np.clip(stds[indices_low_noise], a_min=0.0, a_max=1.0), vmin=0., vmax=0.5, marker='s', edgecolors='k', cmap='Greens', label='Low noise')
+    plot.scatter(feat_2d[indices_high_noise,1], feat_2d[indices_high_noise,0], c=np.clip(stds[indices_high_noise], a_min=0.0, a_max=1.0), vmin=0., vmax=1.0, marker='p', edgecolors='k', cmap='Greens', label='High noise')
+    plot.scatter(feat_2d[indices_ind_points,1], feat_2d[indices_ind_points,0], c=np.clip(stds[indices_ind_points], a_min=0.0, a_max=1.0), vmin=0., vmax=1.0, marker='^', edgecolors='k', cmap='Reds', label='Inducing points')
     plot.legend()
     fig.savefig(os.path.join(config['exp_dir'], save_name_tsne))
 
@@ -219,7 +219,7 @@ def print_tsne_evaluation(instance_model, train_data_instances, save_name_tsne, 
     plot.scatter(means[indices_high_noise], stds[indices_high_noise], marker='p', edgecolors='k', c='tab:green', label='High Noise')
     plot.scatter(means[indices_negative], stds[indices_negative], marker='o', edgecolors='k', c='tab:blue', label='Negative')
     plot.scatter(means[indices_positive], stds[indices_positive], marker='o', edgecolors='k', c='tab:purple', label='Positive')
-    plot.scatter(means[indices_ind_points], stds[indices_ind_points], marker='', edgecolors='k', c='k', label='Inducing Points')
+    plot.scatter(means[indices_ind_points], stds[indices_ind_points], marker='^', edgecolors='k', c='k', label='Inducing Points')
     plot.legend()
     fig.savefig(os.path.join(config['exp_dir'], save_name_att))
 

@@ -1,0 +1,17 @@
+att_activation: sigmoid
+feature_dims: 8
+cnn_feature_dims: 64
+kernel_trainable: False
+kernel_lengthscale: 0.1
+kernel_variance: 1.0
+prior_mean: 0.0
+num_inducing_points: 32
+indp_min: 0.3
+indp_max: 0.7
+obsnoise_var_init: 0.1
+indp_var_init: 0.01
+learning_rate: 0.0001
+learning_rate_gp: 0.0001
+kl_weight: 1.0
+epochs: 20
+mlflow_url: /work/work_arne/mlflow_server
