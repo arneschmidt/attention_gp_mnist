@@ -147,7 +147,7 @@ def print_tsne_evaluation(instance_model, train_data_instances, save_name_tsne, 
         labels.append(x[1])
 
 
-    noise_factor = 0.6
+    noise_factor = 0.5
     for i in range(n):
         x = next(test_data)
         img = x[0]
@@ -164,7 +164,7 @@ def print_tsne_evaluation(instance_model, train_data_instances, save_name_tsne, 
         stds.append(std)
         labels.append(x[1])
 
-    noise_factor = 0.8
+    noise_factor = 0.9
     for i in range(n):
         x = next(test_data)
         img = x[0]
